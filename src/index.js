@@ -1,22 +1,13 @@
-// Archivo principal del TP 06 (paso 4: router extraido)
+// Arranque del TP 06: crea las dependencias, arma la app y abre el puerto.
+// No declara rutas ni valida formularios.
 
-const path = require("node:path");
-const express = require("express");
-const expressLayouts = require("express-ejs-layouts");
-const morgan = require("morgan");
-
-const {
-  crearIdentificadorSolicitud,
-  medirDuracion,
-} = require("./middleware/solicitudes");
 const { crearServicioReservas } = require("./servicios/reservas");
-const { crearControladorReservas } = require("./controladores/reservas");
-const { crearRouterReservas } = require("./rutas/reservas");
+const { crearApp } = require("./app");
 
-const app = express();
 const PUERTO = 3000;
 
 // Semilla: las reservas con las que arranca el servidor.
+// No es persistencia: cada vez que el proceso arranca se vuelve a esta lista.
 const reservasIniciales = [
   {
     id: 1,
@@ -56,57 +47,16 @@ const reservasIniciales = [
   },
 ];
 
-// Una sola instancia del servicio, compartida por todas las rutas.
-const servicioReservas = crearServicioReservas(reservasIniciales);
-const controladorReservas = crearControladorReservas(servicioReservas);
-const reservasRouter = crearRouterReservas(controladorReservas);
+function main() {
+  // Una sola instancia del servicio, compartida por listado, detalle,
+  // /estado y creacion.
+  const servicioReservas = crearServicioReservas(reservasIniciales);
+  const app = crearApp({ servicioReservas });
 
-// ---------------------------------------------------------------
-// Configuracion de vistas
-// ---------------------------------------------------------------
-
-app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "..", "views"));
-
-// ---------------------------------------------------------------
-// Pipeline global, en este orden
-// ---------------------------------------------------------------
-
-app.use(morgan("dev")); // 1. de terceros: registra el pedido en la terminal
-app.use(crearIdentificadorSolicitud()); // 2. propio: arma el ID de la solicitud
-app.use(medirDuracion); // 3. propio: usa ese ID y mide cuanto tarda
-app.use(expressLayouts); // 4. hace que las vistas usen el layout
-app.set("layout", "layouts/main");
-app.use(express.static(path.join(__dirname, "..", "public"))); // 5. archivos de public
-app.use(express.urlencoded({ extended: false })); // 6. arma req.body de los formularios
-app.use(express.json()); // 7. arma req.body cuando el cuerpo viene en JSON
-
-// ---------------------------------------------------------------
-// Rutas de aplicacion
-// ---------------------------------------------------------------
-
-app.get("/", controladorReservas.mostrarInicio);
-app.get("/estado", controladorReservas.mostrarEstado);
-
-// Se monta el router. Las rutas de adentro son relativas a /reservas.
-app.use("/reservas", reservasRouter);
-
-// ---------------------------------------------------------------
-// Pagina 404, al final de todo
-// ---------------------------------------------------------------
-
-app.use(function (req, res) {
-  res.status(404).render("no-encontrado", {
-    titulo: "Página no encontrada",
-    mensaje: "La dirección solicitada no existe.",
+  app.listen(PUERTO, function () {
+    console.log("Servidor andando en http://localhost:" + PUERTO);
+    console.log("Reservas iniciales: " + servicioReservas.contar());
   });
-});
+}
 
-// ---------------------------------------------------------------
-// Arranque
-// ---------------------------------------------------------------
-
-app.listen(PUERTO, function () {
-  console.log("Servidor andando en http://localhost:" + PUERTO);
-  console.log("Reservas iniciales: " + servicioReservas.contar());
-});
+main();
