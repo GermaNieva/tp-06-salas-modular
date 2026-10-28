@@ -1,4 +1,4 @@
-// Archivo principal del TP 06 (paso 1: middleware extraido)
+// Archivo principal del TP 06 (paso 2: servicio extraido)
 
 const path = require("node:path");
 const express = require("express");
@@ -15,12 +15,13 @@ const {
   prepararAreaReservas,
   validarReserva,
 } = require("./middleware/reservas");
+const { crearServicioReservas } = require("./servicios/reservas");
 
 const app = express();
 const PUERTO = 3000;
 
-// Los datos viven solo en memoria mientras el servidor esta encendido.
-const reservas = [
+// Semilla: las reservas con las que arranca el servidor.
+const reservasIniciales = [
   {
     id: 1,
     estudiante: "Germán Nieva",
@@ -59,6 +60,9 @@ const reservas = [
   },
 ];
 
+// Una sola instancia del servicio, compartida por todas las rutas.
+const servicioReservas = crearServicioReservas(reservasIniciales);
+
 // ---------------------------------------------------------------
 // Configuracion de vistas
 // ---------------------------------------------------------------
@@ -86,7 +90,7 @@ app.use(express.json()); // 7. arma req.body cuando el cuerpo viene en JSON
 app.get("/", function (req, res) {
   res.render("inicio", {
     titulo: "Reservas de salas de estudio",
-    cantidad: reservas.length,
+    cantidad: servicioReservas.contar(),
   });
 });
 
@@ -94,7 +98,7 @@ app.get("/", function (req, res) {
 app.get("/estado", function (req, res) {
   res.json({
     servicio: "activo",
-    reservas: reservas.length,
+    reservas: servicioReservas.contar(),
     solicitudId: res.locals.solicitudId,
   });
 });
@@ -111,7 +115,7 @@ reservasRouter.use(prepararAreaReservas);
 reservasRouter.get("/", function (req, res) {
   res.render("reservas/lista", {
     titulo: "Listado de reservas",
-    reservas: reservas,
+    reservas: servicioReservas.listar(),
   });
 });
 
@@ -130,9 +134,7 @@ reservasRouter.get("/nueva", function (req, res) {
 // Detalle
 reservasRouter.get("/:id", function (req, res) {
   const id = Number(req.params.id);
-  const reserva = reservas.find(function (item) {
-    return item.id === id;
-  });
+  const reserva = servicioReservas.obtenerPorId(id);
 
   if (!reserva) {
     res.status(404).render("no-encontrado", {
@@ -150,17 +152,7 @@ reservasRouter.get("/:id", function (req, res) {
 
 // El handler final confia en el validador, no repite las comprobaciones.
 function crearReserva(req, res) {
-  const nueva = {
-    id: proximoId(),
-    estudiante: req.reservaValidada.estudiante,
-    email: req.reservaValidada.email,
-    sala: req.reservaValidada.sala,
-    fecha: req.reservaValidada.fecha,
-    turno: req.reservaValidada.turno,
-    personas: req.reservaValidada.personas,
-  };
-
-  reservas.push(nueva);
+  servicioReservas.crear(req.reservaValidada);
 
   res.redirect("/reservas");
 }
@@ -197,24 +189,11 @@ function valoresVacios() {
   };
 }
 
-// el id mas alto que haya + 1
-function proximoId() {
-  let mayor = 0;
-
-  reservas.forEach(function (reserva) {
-    if (reserva.id > mayor) {
-      mayor = reserva.id;
-    }
-  });
-
-  return mayor + 1;
-}
-
 // ---------------------------------------------------------------
 // Arranque
 // ---------------------------------------------------------------
 
 app.listen(PUERTO, function () {
   console.log("Servidor andando en http://localhost:" + PUERTO);
-  console.log("Reservas iniciales: " + reservas.length);
+  console.log("Reservas iniciales: " + servicioReservas.contar());
 });
