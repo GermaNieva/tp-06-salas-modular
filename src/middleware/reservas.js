@@ -51,7 +51,8 @@ function validarReserva(req, res, next) {
   } else if (!TURNOS_PERMITIDOS.includes(turno)) {
     error = "El turno tiene que ser Mañana, Tarde o Noche.";
   } else if (!Number.isInteger(personas) || personas < 1 || personas > 6) {
-    error = "La cantidad de personas tiene que ser un número entero del 1 al 6.";
+    error =
+      "La cantidad de personas tiene que ser un número entero del 1 al 6.";
   } else if (!email.includes("@")) {
     error = "El email tiene que tener una arroba.";
   }

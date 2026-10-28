@@ -1,309 +1,370 @@
-# Trabajo práctico 05
+# Trabajo práctico 06
 
-## Descripción
+Refactorización modular de la aplicación de reservas de salas de estudio.
 
-Aplicación web hecha con Node.js, Express y EJS para ver las reservas de las
-salas de estudio de una biblioteca y pedir un turno nuevo.
+## Proyecto de partida y cambios
 
-El trabajo continúa lo de la semana anterior (páginas, formulario y archivos
-estáticos), pero lo que se practica acá es el **middleware**: cada solicitud
-pasa por una fila de funciones que la registran, le ponen un identificador, le
-toman el tiempo, arman `req.body` y recién después llegan a la ruta.
+El punto de partida es una copia de mi TP 05
+(`tp-05-salas-middleware`), copiada sin `node_modules` ni `.git`. El TP 05
+quedó intacto en su propia carpeta y su propio repositorio.
 
-Las salas permitidas son Sala Norte, Sala Sur y Sala Multimedia. Los turnos son
-Mañana, Tarde y Noche. Las cuatro reservas iniciales y las que se cargan desde
-el formulario viven solamente en memoria.
+En el TP 05 todo estaba en `src/index.js`: los datos, el contador de
+solicitudes, el middleware, la validación, las rutas, el 404 y `app.listen`.
+Acá lo reorganicé en módulos, siguiendo el mismo orden de la clase: **un paso
+por vez, probando la matriz completa antes de seguir y con un commit por
+paso**. El historial del repositorio muestra ese recorrido:
 
-## Instalación
+| Commit | Qué se hizo |
+| ------ | ----------- |
+| Copia del TP 05 como línea de base | La copia sin cambios |
+| Paso 1 | Middleware a `middleware/solicitudes.js` y `middleware/reservas.js`; corrección del POST sin cuerpo |
+| Paso 2 | El arreglo y sus operaciones pasan a `servicios/reservas.js` |
+| Paso 3 | Los handlers pasan a `controladores/reservas.js` |
+| Paso 4 | Las rutas del área pasan a `rutas/reservas.js` |
+| Paso 5 | `app.js` construye Express; `index.js` solo arranca |
+| Paso 6 | `configuracion.js` lee `PORT` y `NODE_ENV` |
+| Formato, análisis estático y README | Prettier, ESLint, scripts y esta documentación |
 
-Hay que tener instalado Node.js. Después, desde la carpeta del proyecto:
+### Línea de base y reparación
+
+Antes de mover código ejecuté el TP 05 y anoté el resultado de cada ruta (ver
+[Matriz antes/después](#matriz-antesdespués)). Todo el contrato funcionaba,
+salvo un caso: un **POST sin cuerpo** o con `Content-Type: text/plain`
+respondía **500** con `TypeError: Cannot read properties of undefined
+(reading 'estudiante')`. Pasaba porque ningún parser arma `req.body` en esos
+casos y el validador leía `req.body.estudiante` directamente.
+
+La reparación está en `middleware/reservas.js`, en el paso 1:
+
+```js
+const datos = req.body ?? {};
+const estudiante = String(datos.estudiante ?? "").trim();
+```
+
+Si `req.body` no existe se usa un objeto vacío, todos los campos quedan vacíos
+y la solicitud cae en el **400** de siempre ("Hay que completar todos los
+campos."), sin crear nada. Ese es el único cambio de comportamiento. Los
+campos, las reglas, los mensajes y los valores que se le devuelven al
+formulario son los mismos del TP 05.
+
+Las vistas, el layout, el CSS y las cuatro reservas iniciales no cambiaron. El
+pie de las páginas sigue diciendo "Trabajo práctico 05" porque las vistas se
+conservaron tal cual.
+
+## Instalación y ejecución
+
+Hay que tener Node.js instalado (lo probé con la versión 24). Desde la carpeta
+del proyecto:
 
 ```
 npm install
-```
-
-Eso descarga Express, EJS, express-ejs-layouts y Morgan.
-
-## Ejecución
-
-```
 npm start
 ```
 
-El servidor queda escuchando en http://localhost:3000.
+El servidor queda escuchando en http://localhost:3000. Para detenerlo:
+**Ctrl + C** en la terminal donde está corriendo.
 
-Para revisar que el archivo no tenga errores de sintaxis:
+`npm start` funciona sin ningún archivo `.env`, porque los valores por defecto
+están en `configuracion.js`.
+
+Para probar con un `.env` local (ver la sección siguiente):
 
 ```
+npm run start:local
+```
+
+Ese script usa `node --env-file=.env src/index.js`, así que **requiere** que
+exista el archivo `.env`; si no existe, Node no arranca.
+
+Para revisar formato y análisis estático:
+
+```
+npm run format
 npm run check
 ```
 
-## Rutas
+## Configuración del entorno
 
-| Método y ruta         | Qué hace                                                       |
-| --------------------- | -------------------------------------------------------------- |
-| `GET /`               | Página inicial con la explicación y los enlaces                |
-| `GET /estado`         | Devuelve JSON con el servicio, la cantidad de reservas y el ID |
-| `GET /reservas`       | Listado de reservas (o mensaje de listado vacío)               |
-| `GET /reservas/nueva` | Formulario para reservar                                        |
-| `GET /reservas/:id`   | Detalle de una reserva; si el id no existe responde 404        |
-| `POST /reservas`      | Valida y, si está bien, crea la reserva y redirige             |
+`src/configuracion.js` es el único archivo que lee `process.env`:
 
-`GET /reservas/nueva` está declarada **antes** que `GET /reservas/:id`. Si
-estuviera después, Express tomaría la palabra `nueva` como si fuera un id y el
-formulario nunca se abriría.
+| Variable   | Valor por defecto | Qué hace |
+| ---------- | ----------------- | -------- |
+| `PORT`     | `3000`            | Puerto donde escucha el servidor |
+| `NODE_ENV` | sin valor         | Si es `production`, Morgan usa el formato `combined`; si no, usa `dev` |
 
-`GET /estado` responde algo así:
+`process.env` siempre trae texto, por eso `PORT` se convierte con `Number`. Si
+el resultado no es un entero entre 1 y 65535, `leerConfiguracion` lanza un
+error, `index.js` lo muestra y el servidor **no arranca** (código de salida 1).
 
-```json
-{
-  "servicio": "activo",
-  "reservas": 4,
-  "solicitudId": "BIB-0001"
-}
-```
+`NODE_ENV=production` **solo** cambia el formato de registro de Morgan. No
+vuelve la aplicación "de producción" ni cambia nada más.
 
-La cantidad cambia cuando se carga una reserva y el identificador sube en cada
-solicitud.
-
-## Pipeline de middleware
-
-Este es el orden real que tiene `src/index.js`:
+`.env.example` está en el repositorio con valores no secretos:
 
 ```
-app.use(morgan("dev"));
-app.use(identificarSolicitud);
-app.use(medirDuracion);
-app.use(expressLayouts);
-app.use(express.static(...));
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
-
-app.get("/");
-app.get("/estado");
-
-app.use("/reservas", reservasRouter);   // prepararAreaReservas + rutas internas
-
-app.use(...)   // página 404, al final de todo
+PORT=3000
+NODE_ENV=development
 ```
 
-### Por qué ese orden
+Para usarlo se copia como `.env` y se cambian los valores. `.env` y
+`node_modules/` están en `.gitignore`, así que nunca se suben.
 
-- **Morgan primero** para que quede registrada cualquier solicitud, incluso las
-  que terminan en 404.
-- **`identificarSolicitud` antes que `medirDuracion`**, porque la función que
-  mide imprime el `solicitudId` y ese valor lo crea la anterior. Si estuvieran
-  al revés, la línea de medición saldría con `undefined`.
-- **`medirDuracion` bien arriba**, porque el tiempo tiene que empezar a contarse
-  lo antes posible para que incluya todo lo que viene después.
-- **`expressLayouts` antes de las rutas**, porque es el que hace que `res.render`
-  meta la vista dentro de `layouts/main.ejs`.
-- **`express.static` antes de las rutas**, así un pedido de `/css/estilos.css` se
-  resuelve con el archivo y no sigue hasta el 404.
-- **Los parsers antes del router**, porque `validarReserva` lee `req.body` y ese
-  objeto lo arma `express.urlencoded`. Si el parser estuviera después,
-  `req.body` llegaría vacío y toda reserva válida sería rechazada.
-- **El 404 al final**, porque es el único que no tiene ruta: atrapa lo que no
-  matcheó con nada anterior. Si estuviera arriba, respondería siempre él.
+Pruebas que hice:
 
-### Los tres tipos de middleware
+| Caso | Comando | Resultado |
+| ---- | ------- | --------- |
+| Sin `PORT` | `npm start` | Escucha en 3000 |
+| Puerto alternativo | `PORT=4100 npm start` | Escucha en 4100; la matriz completa da lo mismo que en 3000 |
+| `.env` local | `.env` con `PORT=4300` y `npm run start:local` | Escucha en 4300 |
+| `PORT=abc` | `PORT=abc npm start` | No inicia: `No se pudo iniciar la aplicación: PORT tiene que ser un número entero entre 1 y 65535 (llegó: abc).` |
+| `PORT=70000` | idem | No inicia, mismo mensaje con `70000` |
+| `PORT=0`, `PORT=3000.5`, `PORT=` vacío | idem | No inicia |
+| Producción | `NODE_ENV=production` | Morgan muestra líneas `combined`: `::1 - - [28/Oct/2026:11:44:33 +0000] "GET /reservas HTTP/1.1" 200 2909 "-" "curl/8.2.1"` |
 
-- **Incorporado**: viene adentro de Express, no se instala aparte.
-  Acá son `express.static`, `express.urlencoded` y `express.json`.
-- **De terceros**: un paquete de npm que se instala y se enchufa.
-  Acá es `morgan("dev")`, que imprime método, ruta, estado y tiempo.
-- **Personalizado**: funciones escritas por mí con la forma
-  `(req, res, next)`. Acá son `identificarSolicitud`, `medirDuracion`,
-  `prepararAreaReservas` y `validarReserva`.
+En PowerShell las variables se ponen así: `$env:PORT=4100; npm start`.
 
-### Cuándo se usa `next()`
+## Mapa de módulos y dependencias
 
-`next()` es la forma de decir "yo ya hice mi parte, que siga el siguiente".
-Un middleware tiene que elegir una de dos cosas: **responder** (con `render`,
-`json`, `redirect`) o **llamar a `next()`**. Las dos no, porque si ya se mandó
-una respuesta y después se llama a `next()`, otra función puede intentar
-responder de nuevo y aparece el error de cabeceras ya enviadas.
-
-Por eso `validarReserva` llama a `next()` solamente en el camino válido, y en el
-camino inválido hace `render` y corta con un `return`.
-
-## Alcance de cada función
-
-| Función               | Alcance   | Dónde corre                                     |
-| --------------------- | --------- | ------------------------------------------------ |
-| `morgan("dev")`       | global    | en todas las solicitudes                         |
-| `identificarSolicitud`| global    | en todas las solicitudes                         |
-| `medirDuracion`       | global    | en todas las solicitudes                         |
-| `expressLayouts`      | global    | en todas las solicitudes                         |
-| `express.static`      | global    | en todas las solicitudes                         |
-| `express.urlencoded`  | global    | en todas las solicitudes                         |
-| `express.json`        | global    | en todas las solicitudes                         |
-| `prepararAreaReservas`| de router | solo en lo que cuelga de `/reservas`             |
-| `validarReserva`      | de ruta   | solo en `POST /reservas`                         |
-
-- **Global** (`app.use(...)`): corre para cualquier dirección.
-- **De router** (`reservasRouter.use(...)`): corre solo para las direcciones que
-  entran por el montaje `app.use("/reservas", reservasRouter)`.
-- **De ruta** (`reservasRouter.post("/", validarReserva, crearReserva)`): corre
-  solo para ese método y esa dirección.
-
-`prepararAreaReservas` deja `res.locals.seccion = "Reservas de salas"`, que las
-vistas `reservas/lista.ejs` y `reservas/nueva.ejs` muestran arriba del título.
-`GET /estado` no pasa por el router, así que no tiene ese valor y tampoco lo
-necesita: devuelve JSON.
-
-### Qué logra montar el router
-
-```js
-app.use("/reservas", reservasRouter);
+```
+tp-06-salas-modular/
+|-- public/css/estilos.css        # sin cambios
+|-- views/                        # sin cambios (layout, inicio, reservas, no-encontrado)
+|-- src/
+|   |-- index.js                  # semilla + servicio + app + listen
+|   |-- configuracion.js          # PORT y NODE_ENV
+|   |-- app.js                    # Express, pipeline, montaje y 404
+|   |-- rutas/reservas.js         # método + camino -> middleware y controlador
+|   |-- controladores/reservas.js # req/res: render, JSON, 404, redirect
+|   |-- servicios/reservas.js     # el arreglo: listar, buscar, contar, crear
+|   `-- middleware/
+|       |-- solicitudes.js        # ID de solicitud y medición hasta finish
+|       `-- reservas.js           # sección del área y validación del POST
+|-- .env.example
+|-- .gitattributes
+|-- .gitignore
+|-- eslint.config.js
+|-- package.json
+|-- package-lock.json
+`-- README.md
 ```
 
-El montaje hace que las rutas de adentro del router sean **relativas**: `/`,
-`/nueva` y `/:id` terminan siendo `/reservas`, `/reservas/nueva` y
-`/reservas/:id`. Por eso adentro del router no hay que volver a escribir
-`/reservas`. Además permite agrupar todo lo de esa sección y engancharle
-middleware propio.
+| Si quiero saber... | Abro |
+| ------------------ | ---- |
+| cómo arranca el proceso | `src/index.js` |
+| qué variables acepta | `src/configuracion.js` |
+| en qué orden actúa Express | `src/app.js` |
+| qué URLs tiene reservas | `src/rutas/reservas.js` |
+| cómo se responde cada solicitud | `src/controladores/reservas.js` |
+| cómo se guardan y buscan las reservas | `src/servicios/reservas.js` |
+| cómo se identifica, mide o valida | `src/middleware/*` |
 
-### El identificador de solicitud
+Quién importa a quién:
 
-`identificarSolicitud` tiene un contador que arranca en 0 y sube de a uno.
-Con `padStart(4, "0")` arma `BIB-0001`, `BIB-0002`, `BIB-0003`, y lo guarda en
-`res.locals.solicitudId`. Todo lo que se pone en `res.locals` queda disponible
-en las vistas sin pasarlo por `res.render`, así que el layout lo muestra en el
-pie de todas las páginas y `GET /estado` lo devuelve en el JSON.
-
-### Por qué la medición usa el evento `finish`
-
-`medirDuracion` guarda `Date.now()` al principio, pero el cálculo no se puede
-hacer ahí: en ese momento la respuesta todavía no se armó. Por eso registra un
-listener:
-
-```js
-res.on("finish", function () { ... });
+```
+index.js ──> configuracion.js
+   │
+   ├──> servicios/reservas.js     (crea la única instancia)
+   │
+   └──> app.js ──> middleware/solicitudes.js
+           │
+           ├──> controladores/reservas.js ──> middleware/reservas.js (listas de salas y turnos)
+           │
+           └──> rutas/reservas.js ──> middleware/reservas.js (sección y validación)
 ```
 
-`finish` es el evento que Express/Node disparan cuando la respuesta ya terminó
-de enviarse. Recién ahí se conoce el tiempo real y el `res.statusCode`
-definitivo. El middleware, mientras tanto, llama a `next()` enseguida para no
-frenar la solicitud.
+`index.js` crea el servicio y se lo pasa a `crearApp`. `app.js` se lo pasa a
+`crearControladorReservas`, y el controlador se lo pasa al router. Así **todos
+usan el mismo objeto**.
 
-En la terminal quedan dos líneas por solicitud, la de Morgan y la mía:
+### Por qué el servicio no usa `res`
+
+El servicio solo sabe de reservas: guarda el arreglo y lo consulta o modifica.
+No sabe si la respuesta va a ser una vista EJS, un JSON o una redirección, ni
+qué código HTTP corresponde. Devuelve datos (una reserva, una lista, un número)
+o `null` cuando no encuentra algo. Si usara `res.render`, quedaría atado a
+Express y a las vistas, y el día que las reservas se guarden en una base de
+datos habría que tocar también la parte HTTP. Separado, ese cambio queda
+adentro de `servicios/reservas.js`.
+
+### Qué hace el controlador
+
+Es el traductor entre HTTP y el servicio. Lee lo que llega en la solicitud
+(`req.params.id`, `req.reservaValidada`, `res.locals.solicitudId`), le pide al
+servicio la operación que corresponde y decide la respuesta: qué vista
+renderizar, cuándo responder 404, cuándo devolver JSON (`/estado`) y cuándo
+redirigir con 302 después de crear. No guarda el arreglo ni sabe cómo se
+busca una reserva adentro.
+
+### Por qué el router declara caminos relativos
+
+`app.js` monta el router con `app.use("/reservas", reservasRouter)`. Express
+suma el montaje y el camino interno:
+
+| Montaje | Camino en el router | URL pública |
+| ------- | ------------------- | ----------- |
+| `/reservas` | `/` | `/reservas` |
+| `/reservas` | `/nueva` | `/reservas/nueva` |
+| `/reservas` | `/:id` | `/reservas/:id` |
+
+Si adentro del router volviera a escribir `/reservas`, la dirección real sería
+`/reservas/reservas`. `/nueva` está declarada antes que `/:id` para que
+Express no tome la palabra `nueva` como si fuera un id.
+
+### Dónde quedaron las listas de salas y turnos
+
+`SALAS_PERMITIDAS` y `TURNOS_PERMITIDOS` están en `middleware/reservas.js`,
+junto a la validación que las usa. El controlador las importa de ahí para
+dibujar las opciones del formulario, así cada lista existe una sola vez.
+
+## Pipeline y contrato de rutas
+
+El orden del pipeline está en `app.js` y es el mismo del TP 05:
+
+```
+morgan(formatoRegistro)
+  -> identificarSolicitud   (crearIdentificadorSolicitud())
+  -> medirDuracion
+  -> expressLayouts
+  -> express.static(public)
+  -> express.urlencoded
+  -> express.json
+  -> GET /  y  GET /estado          (rutas de aplicación)
+  -> /reservas                      (router: prepararAreaReservas + rutas)
+  -> 404 final
+```
+
+**Qué solicitudes quedan registradas:** Morgan, el identificador y la
+medición están antes que `express.static`, así que **todas** las solicitudes
+quedan registradas dos veces en la terminal (la línea de Morgan y la mía),
+incluso las del CSS, los 400 y los 404. Por ejemplo:
 
 ```
 GET /reservas 200 1.679 ms - 2909
-BIB-0004 GET /reservas -> 200 (2 ms)
+BIB-0004 GET /reservas -> 200 (3 ms)
+BIB-0009 POST /reservas -> 400 (12 ms)
+BIB-0007 GET /reservas/999 -> 404 (2 ms)
 ```
 
-## Validación
+El identificador ahora sale de una fábrica, `crearIdentificadorSolicitud()`. El
+contador quedó encerrado adentro, en vez de ser una variable global del
+archivo principal.
 
-`validarReserva` hace, en este orden:
-
-1. le saca los espacios de más a los textos con `trim()`;
-2. convierte `personas` con `Number`;
-3. revisa que no falte ningún campo;
-4. revisa que la sala esté en `salasPermitidas`;
-5. revisa que el turno esté en `turnosPermitidos`;
-6. revisa que `personas` sea un entero del 1 al 6;
-7. revisa de manera básica que el email tenga una arroba;
-8. si algo falla responde **400**, vuelve a mostrar el formulario con los
-   valores que se habían escrito y un mensaje con `role="alert"`;
-9. si está todo bien arma `req.reservaValidada` y llama a `next()`.
-
-El formulario también tiene `type="date"`, `min` y `max`, pero eso es ayuda del
-navegador y se puede saltear. Las comprobaciones del servidor son las que
-mandan.
-
-`crearReserva` no vuelve a validar: confía en `req.reservaValidada`, le pone un
-id nuevo (el más alto + 1), lo agrega al arreglo y redirige.
-
-### Diagrama del POST válido
+Contrato que se conserva:
 
 ```
-POST /reservas
-  ↓ morgan("dev")
-  ↓ identificarSolicitud
-  ↓ medirDuracion
-  ↓ expressLayouts
-  ↓ express.urlencoded
-  ↓ reservasRouter
-  ↓ prepararAreaReservas
-  ↓ validarReserva
-  ↓ crearReserva
-  ↓ 302 /reservas
-  ↓ finish: ID + estado + duración
+GET  /                 -> 200, inicio
+GET  /estado           -> 200, JSON con cantidad e ID BIB-
+GET  /reservas         -> 200, listado
+GET  /reservas/nueva   -> 200, formulario
+GET  /reservas/:id     -> 200 o 404 HTML
+POST /reservas         -> 302 válido; 400 inválido
+GET  /css/estilos.css  -> 200
+otra URL               -> 404 HTML
 ```
 
-### Diagrama del POST inválido
+`express.urlencoded` sigue antes del validador. En el camino inválido
+`validarReserva` responde 400 y **no** llama a `next()`, así que ni el
+controlador ni el servicio se ejecutan. En el camino válido arma
+`req.reservaValidada` y llama a `next()` para seguir hacia
+`controladorReservas.crear`.
+
+## Matriz antes/después
+
+"Antes" es el TP 05 copiado, sin tocar. "Después" es la versión final. Probé
+cada caso con `curl` y la matriz completa se repitió después de cada paso. Los
+pasos 2 a 6 dieron exactamente lo mismo que el paso 1.
+
+| Caso | Antes | Después | Evidencia |
+| ---- | ----- | ------- | --------- |
+| `GET /` | 200 | 200 | "Ahora mismo hay 4 reservas"; pie con `Solicitud BIB-0002` |
+| `GET /estado` | 200 | 200 | `{"servicio":"activo","reservas":4,"solicitudId":"BIB-0003"}` |
+| `GET /reservas` | 200 | 200 | 4 tarjetas |
+| `GET /reservas/nueva` | 200 | 200 | 6 campos + botón; 3 salas y 3 turnos (8 `<option>` con los "Elegir...") |
+| `GET /reservas/1` | 200 | 200 | "Reserva número 1", Germán Nieva |
+| `GET /reservas/999` | 404 | 404 | Vista "Reserva no encontrada"; el servidor sigue andando |
+| `GET /reservas/abc` | 404 | 404 | Vista "Reserva no encontrada" |
+| POST vacío (formulario sin campos) | 400 | 400 | "Hay que completar todos los campos." |
+| POST sin cuerpo | **500** | **400** | Antes: `TypeError`. Después: mensaje de campos vacíos |
+| POST `text/plain` | **500** | **400** | Antes: `TypeError`. Después: mensaje de campos vacíos |
+| Sala no permitida (`Sala Este`) | 400 | 400 | "Esa sala no está en la lista de salas permitidas." |
+| Turno no permitido | 400 | 400 | "El turno tiene que ser Mañana, Tarde o Noche." |
+| Email sin `@` | 400 | 400 | "El email tiene que tener una arroba." |
+| Personas 0, 7 y 2.5 | 400 | 400 | "La cantidad de personas tiene que ser un número entero del 1 al 6." |
+| 400 conserva valores | sí | sí | El formulario vuelve con `value="Lucía Fernández"` y el email |
+| POST válido | 302 | 302 | `Location: /reservas` |
+| Listado después del POST | 200 | 200 | 5 tarjetas, aparece Lucía Fernández |
+| `/estado` después del POST | 200 | 200 | `"reservas":5`, mismo arreglo que el listado |
+| `GET /css/estilos.css` | 200 | 200 | `text/css`, 2890 bytes |
+| `GET /url-inexistente` | 404 | 404 | Vista "Página no encontrada" |
+| Reinicio | 200 | 200 | Vuelve a `"reservas":4`; `/reservas/5` da 404 |
+| Puerto alternativo | no existía | 200 | Responde en 4100 |
+| Puerto inválido | no existía | no inicia | Mensaje explícito, código de salida 1 |
+
+En todos los casos Morgan y la medición propia siguieron mostrando 200, 302,
+400 y 404 en la terminal.
+
+## Formato y análisis estático
+
+Instalé Prettier y ESLint como dependencias de desarrollo:
 
 ```
-POST /reservas
-  ↓ morgan("dev")
-  ↓ identificarSolicitud
-  ↓ medirDuracion
-  ↓ expressLayouts
-  ↓ express.urlencoded
-  ↓ reservasRouter
-  ↓ prepararAreaReservas
-  ↓ validarReserva  ->  400 + render de reservas/nueva  ->  FIN
-  ↓ finish: ID + estado 400 + duración
+npm install --save-dev prettier eslint @eslint/js
 ```
 
-El camino inválido **termina en `validarReserva`**. Nunca llega a
-`crearReserva`, así que no se agrega ninguna reserva al arreglo. La respuesta
-igual pasa por `finish`, porque la medición se engancha al final de cualquier
-respuesta, salga bien o mal.
+Scripts de `package.json`:
 
-### Diferencia entre el POST 302 y el GET posterior
+| Script | Qué hace |
+| ------ | -------- |
+| `npm run format` | `prettier --write src`: reescribe el formato |
+| `npm run format:check` | `prettier --check src`: solo revisa, no cambia nada |
+| `npm run lint` | `eslint src`: busca patrones problemáticos |
+| `npm run check` | `format:check` y después `lint` |
 
-El POST no dibuja el listado: responde `res.redirect("/reservas")`, que es un
-**302**, o sea "la información que buscás está en esta otra dirección". Al
-recibirlo, el navegador hace por su cuenta un `GET /reservas` y ese segundo
-pedido es el que devuelve **200** con la página ya actualizada.
+`eslint.config.js` aplica las reglas recomendadas a `src/**/*.js` como
+CommonJS, declarando `require`, `module`, `__dirname`, `process` y `console`.
 
-Son dos solicitudes distintas, y se ve en la terminal porque cada una tiene su
-propio `BIB-xxxx`. Se hace así para que la dirección que queda en el navegador
-sea un GET: si quedara el POST, al apretar F5 el navegador ofrecería reenviar el
-formulario y se cargaría la reserva dos veces.
+Comandos que ejecuté y qué dieron:
 
-## Pruebas manuales
+- `npm run format:check` antes de formatear: avisó de estilo distinto en
+  `controladores/reservas.js` y `middleware/reservas.js`.
+- `npm run format`: corrigió esos dos archivos y dejó los otros seis sin
+  cambios.
+- `npm run check`: `All matched files use Prettier code style!` y ESLint sin
+  problemas (código de salida 0).
+- Para confirmar que ESLint realmente revisa, agregué un archivo temporal con
+  una variable sin usar y otra sin declarar. Marcó `no-unused-vars` y
+  `no-undef`, y después lo borré.
 
-| Caso                              | Estado esperado   | Resultado              |
-| --------------------------------- | ----------------- | ---------------------- |
-| `GET /`                           | 200               | OK                     |
-| `GET /estado`                     | 200               | JSON con cantidad e ID |
-| `GET /reservas`                   | 200               | 4 reservas             |
-| Listado vacío (arreglo vacío)     | 200               | mensaje alternativo    |
-| `GET /reservas/nueva`             | 200               | controles etiquetados  |
-| `GET /reservas/1`                 | 200               | datos completos        |
-| `GET /reservas/999`               | 404               | página HTML            |
-| Campos vacíos                     | 400               | error y valores        |
-| Sala no permitida                 | 400               | no se crea             |
-| Turno no permitido                | 400               | no se crea             |
-| Email sin arroba                  | 400               | no se crea             |
-| `personas = 0`                    | 400               | no se crea             |
-| `personas = 7`                    | 400               | no se crea             |
-| Reserva válida                    | 302 y después 200 | tarjeta nueva          |
-| `GET /direccion-inventada`        | 404               | middleware final       |
-| Reinicio del servidor             | 200               | vuelve a 4 reservas    |
+`.gitattributes` fija los finales de línea en LF. Sin eso, en Windows git
+puede bajar los archivos con CRLF y `prettier --check` los marca a todos.
 
-En cada caso miré también la línea de Morgan y la línea de medición en la
-terminal. Para probar el listado vacío le pasé por un rato un arreglo vacío a la
-vista y después dejé el código como estaba.
+Estas herramientas revisan cómo está escrito el código, no lo que hace.
+Ninguna comprueba que un POST inválido dé 400, por eso la matriz manual sigue
+siendo necesaria.
 
-## Persistencia temporal
+## Persistencia temporal y límites
 
-Las reservas están en una constante de `src/index.js`:
+Hay **un solo arreglo de reservas** y vive adentro de
+`crearServicioReservas`, en `servicios/reservas.js`:
 
 ```js
-const reservas = [ ... ];
+const reservas = [...reservasIniciales];
 ```
 
-`crearReserva` hace `reservas.push(nueva)` y nada más: no escribe en ningún
-archivo ni en ninguna base de datos. Ese arreglo vive en la memoria del proceso
-de Node.
+Es una copia de la semilla `reservasIniciales` de `index.js`. Como
+`crearServicioReservas` se llama una sola vez, el listado, el detalle,
+`/estado` y el POST trabajan sobre ese mismo arreglo. Por eso después de crear
+una reserva el listado muestra 5 y `/estado` también dice 5. `listar()`
+devuelve una copia, así que desde afuera no se puede hacer `push` sobre el
+arreglo real: la única forma de agregar es `crear()`.
 
-Cuando se corta el servidor con Ctrl + C, el proceso termina y esa memoria se
-libera. Al volver a ejecutar `npm start`, Node lee el archivo otra vez y arma el
-arreglo con las cuatro reservas escritas en el código, así que las que se habían
-cargado desde el formulario desaparecen. El contador de `identificarSolicitud`
-también vuelve a empezar en `BIB-0001`.
+Ese arreglo está en la memoria del proceso de Node. Cuando el servidor se
+detiene con Ctrl + C, la memoria se libera. Al volver a ejecutar
+`npm start`, `index.js` crea otro servicio desde la semilla y se vuelve a las
+cuatro reservas iniciales. Las reservas cargadas desde el formulario se
+pierden, y el contador `BIB-` vuelve a empezar en `BIB-0001`.
+
+No hay base de datos ni escritura de archivos, porque están fuera del alcance
+de este trabajo. Si más adelante las reservas pasan a una base de datos, el
+cambio queda adentro del servicio: las rutas, el controlador y las vistas no
+tendrían por qué enterarse.

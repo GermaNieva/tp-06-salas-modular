@@ -1,18 +1,22 @@
 {
-  "name": "tp-05-salas-middleware",
+  "name": "tp-06-salas-modular",
   "version": "1.0.0",
-  "description": "Aplicacion web de reservas de salas de estudio armada alrededor de un pipeline de middleware de Express.",
+  "description": "Reservas de salas de estudio del TP 05 reorganizadas en modulos de arranque, configuracion, app, rutas, controlador, servicio y middleware.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js"
+    "start:local": "node --env-file=.env src/index.js",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src",
+    "lint": "eslint src",
+    "check": "npm run format:check && npm run lint"
   },
   "keywords": [
     "nodejs",
     "express",
-    "middleware",
-    "morgan",
+    "modulos",
+    "refactorizacion",
     "ejs"
   ],
   "author": "German Nieva",
@@ -22,5 +26,10 @@
     "express": "^5.2.1",
     "express-ejs-layouts": "^2.5.1",
     "morgan": "^1.12.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10"
   }
 }

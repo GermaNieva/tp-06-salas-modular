@@ -2,7 +2,10 @@
 // servicio en una respuesta HTTP (vista, JSON, 404 o redireccion).
 // No guarda el arreglo ni sabe como se buscan los datos.
 
-const { SALAS_PERMITIDAS, TURNOS_PERMITIDOS } = require("../middleware/reservas");
+const {
+  SALAS_PERMITIDAS,
+  TURNOS_PERMITIDOS,
+} = require("../middleware/reservas");
 
 // Fabrica del controlador. Recibe la unica instancia del servicio y todas
 // las funciones que devuelve trabajan sobre ella.
