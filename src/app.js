@@ -13,7 +13,7 @@ const {
 const { crearControladorReservas } = require("./controladores/reservas");
 const { crearRouterReservas } = require("./rutas/reservas");
 
-function crearApp({ servicioReservas }) {
+function crearApp({ servicioReservas, formatoRegistro }) {
   const app = express();
 
   const controladorReservas = crearControladorReservas(servicioReservas);
@@ -25,7 +25,7 @@ function crearApp({ servicioReservas }) {
   app.set("layout", "layouts/main");
 
   // Pipeline global, en este orden
-  app.use(morgan("dev")); // 1. de terceros: registra el pedido en la terminal
+  app.use(morgan(formatoRegistro)); // 1. de terceros: "dev" o "combined"
   app.use(crearIdentificadorSolicitud()); // 2. propio: arma el ID de la solicitud
   app.use(medirDuracion); // 3. propio: usa ese ID y mide cuanto tarda
   app.use(expressLayouts); // 4. hace que las vistas usen el layout

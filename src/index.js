@@ -1,10 +1,9 @@
 // Arranque del TP 06: crea las dependencias, arma la app y abre el puerto.
 // No declara rutas ni valida formularios.
 
+const { leerConfiguracion } = require("./configuracion");
 const { crearServicioReservas } = require("./servicios/reservas");
 const { crearApp } = require("./app");
-
-const PUERTO = 3000;
 
 // Semilla: las reservas con las que arranca el servidor.
 // No es persistencia: cada vez que el proceso arranca se vuelve a esta lista.
@@ -48,13 +47,26 @@ const reservasIniciales = [
 ];
 
 function main() {
+  // Lo primero es la configuracion: si PORT es invalido, no se arma nada.
+  let configuracion;
+
+  try {
+    configuracion = leerConfiguracion();
+  } catch (error) {
+    console.error("No se pudo iniciar la aplicación: " + error.message);
+    process.exitCode = 1;
+    return;
+  }
+
+  const { puerto, formatoRegistro } = configuracion;
+
   // Una sola instancia del servicio, compartida por listado, detalle,
   // /estado y creacion.
   const servicioReservas = crearServicioReservas(reservasIniciales);
-  const app = crearApp({ servicioReservas });
+  const app = crearApp({ servicioReservas, formatoRegistro });
 
-  app.listen(PUERTO, function () {
-    console.log("Servidor andando en http://localhost:" + PUERTO);
+  app.listen(puerto, function () {
+    console.log("Servidor andando en http://localhost:" + puerto);
     console.log("Reservas iniciales: " + servicioReservas.contar());
   });
 }
