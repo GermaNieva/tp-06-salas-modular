@@ -1,4 +1,4 @@
-// Archivo principal del TP 06 (paso 2: servicio extraido)
+// Archivo principal del TP 06 (paso 3: controlador extraido)
 
 const path = require("node:path");
 const express = require("express");
@@ -10,12 +10,11 @@ const {
   medirDuracion,
 } = require("./middleware/solicitudes");
 const {
-  SALAS_PERMITIDAS,
-  TURNOS_PERMITIDOS,
   prepararAreaReservas,
   validarReserva,
 } = require("./middleware/reservas");
 const { crearServicioReservas } = require("./servicios/reservas");
+const { crearControladorReservas } = require("./controladores/reservas");
 
 const app = express();
 const PUERTO = 3000;
@@ -62,6 +61,7 @@ const reservasIniciales = [
 
 // Una sola instancia del servicio, compartida por todas las rutas.
 const servicioReservas = crearServicioReservas(reservasIniciales);
+const controladorReservas = crearControladorReservas(servicioReservas);
 
 // ---------------------------------------------------------------
 // Configuracion de vistas
@@ -87,21 +87,8 @@ app.use(express.json()); // 7. arma req.body cuando el cuerpo viene en JSON
 // Rutas de aplicacion
 // ---------------------------------------------------------------
 
-app.get("/", function (req, res) {
-  res.render("inicio", {
-    titulo: "Reservas de salas de estudio",
-    cantidad: servicioReservas.contar(),
-  });
-});
-
-// Esta ruta no renderiza vistas ni depende de "seccion": devuelve JSON.
-app.get("/estado", function (req, res) {
-  res.json({
-    servicio: "activo",
-    reservas: servicioReservas.contar(),
-    solicitudId: res.locals.solicitudId,
-  });
-});
+app.get("/", controladorReservas.mostrarInicio);
+app.get("/estado", controladorReservas.mostrarEstado);
 
 // ---------------------------------------------------------------
 // Router de reservas
@@ -110,54 +97,11 @@ app.get("/estado", function (req, res) {
 const reservasRouter = express.Router();
 
 reservasRouter.use(prepararAreaReservas);
-
-// Listado
-reservasRouter.get("/", function (req, res) {
-  res.render("reservas/lista", {
-    titulo: "Listado de reservas",
-    reservas: servicioReservas.listar(),
-  });
-});
-
-// Formulario. Va antes de "/:id" para que la palabra "nueva"
-// no se tome como si fuera un id.
-reservasRouter.get("/nueva", function (req, res) {
-  res.render("reservas/nueva", {
-    titulo: "Nueva reserva",
-    salas: SALAS_PERMITIDAS,
-    turnos: TURNOS_PERMITIDOS,
-    error: null,
-    valores: valoresVacios(),
-  });
-});
-
-// Detalle
-reservasRouter.get("/:id", function (req, res) {
-  const id = Number(req.params.id);
-  const reserva = servicioReservas.obtenerPorId(id);
-
-  if (!reserva) {
-    res.status(404).render("no-encontrado", {
-      titulo: "Reserva no encontrada",
-      mensaje: "No existe una reserva con el número " + req.params.id + ".",
-    });
-    return;
-  }
-
-  res.render("reservas/detalle", {
-    titulo: "Reserva de " + reserva.estudiante,
-    reserva: reserva,
-  });
-});
-
-// El handler final confia en el validador, no repite las comprobaciones.
-function crearReserva(req, res) {
-  servicioReservas.crear(req.reservaValidada);
-
-  res.redirect("/reservas");
-}
-
-reservasRouter.post("/", validarReserva, crearReserva);
+reservasRouter.get("/", controladorReservas.listar);
+// "/nueva" va antes de "/:id" para que "nueva" no se tome como un id.
+reservasRouter.get("/nueva", controladorReservas.mostrarFormulario);
+reservasRouter.get("/:id", controladorReservas.mostrarDetalle);
+reservasRouter.post("/", validarReserva, controladorReservas.crear);
 
 // Se monta el router. Las rutas de adentro son relativas a /reservas.
 app.use("/reservas", reservasRouter);
@@ -172,22 +116,6 @@ app.use(function (req, res) {
     mensaje: "La dirección solicitada no existe.",
   });
 });
-
-// ---------------------------------------------------------------
-// Funciones auxiliares
-// ---------------------------------------------------------------
-
-// campos vacios, para la primera vez que se abre el formulario
-function valoresVacios() {
-  return {
-    estudiante: "",
-    email: "",
-    sala: "",
-    fecha: "",
-    turno: "",
-    personas: "",
-  };
-}
 
 // ---------------------------------------------------------------
 // Arranque
