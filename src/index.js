@@ -1,4 +1,4 @@
-// Archivo principal del TP 06 (paso 3: controlador extraido)
+// Archivo principal del TP 06 (paso 4: router extraido)
 
 const path = require("node:path");
 const express = require("express");
@@ -9,12 +9,9 @@ const {
   crearIdentificadorSolicitud,
   medirDuracion,
 } = require("./middleware/solicitudes");
-const {
-  prepararAreaReservas,
-  validarReserva,
-} = require("./middleware/reservas");
 const { crearServicioReservas } = require("./servicios/reservas");
 const { crearControladorReservas } = require("./controladores/reservas");
+const { crearRouterReservas } = require("./rutas/reservas");
 
 const app = express();
 const PUERTO = 3000;
@@ -62,6 +59,7 @@ const reservasIniciales = [
 // Una sola instancia del servicio, compartida por todas las rutas.
 const servicioReservas = crearServicioReservas(reservasIniciales);
 const controladorReservas = crearControladorReservas(servicioReservas);
+const reservasRouter = crearRouterReservas(controladorReservas);
 
 // ---------------------------------------------------------------
 // Configuracion de vistas
@@ -89,19 +87,6 @@ app.use(express.json()); // 7. arma req.body cuando el cuerpo viene en JSON
 
 app.get("/", controladorReservas.mostrarInicio);
 app.get("/estado", controladorReservas.mostrarEstado);
-
-// ---------------------------------------------------------------
-// Router de reservas
-// ---------------------------------------------------------------
-
-const reservasRouter = express.Router();
-
-reservasRouter.use(prepararAreaReservas);
-reservasRouter.get("/", controladorReservas.listar);
-// "/nueva" va antes de "/:id" para que "nueva" no se tome como un id.
-reservasRouter.get("/nueva", controladorReservas.mostrarFormulario);
-reservasRouter.get("/:id", controladorReservas.mostrarDetalle);
-reservasRouter.post("/", validarReserva, controladorReservas.crear);
 
 // Se monta el router. Las rutas de adentro son relativas a /reservas.
 app.use("/reservas", reservasRouter);
